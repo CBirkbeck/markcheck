@@ -9,15 +9,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let running = false;
 
 const STATUS_KEY = "markcheck.status";
-type Status = { running: boolean; done: number; total: number; skipped: number; scraped: number; message: string };
+type Status = { running: boolean; done: number; total: number; skipped: number; scraped: number; message: string; error?: boolean };
 let status: Status = { running: false, done: 0, total: 0, skipped: 0, scraped: 0, message: "Idle." };
 
 async function publish(patch: Partial<Status>): Promise<void> {
   status = { ...status, ...patch };
   await chrome.storage.local.set({ [STATUS_KEY]: status });
-  // badge: live "done" count while running (blue), final "scraped" count when finished (green)
-  const text = status.running ? String(status.done) : status.scraped ? String(status.scraped) : "";
-  chrome.action.setBadgeBackgroundColor({ color: status.running ? "#3b82f6" : "#16a34a" }).catch(() => {});
+  const color = status.error ? "#dc2626" : status.running ? "#3b82f6" : "#16a34a";
+  const text = status.error ? "!" : status.running ? String(status.done) : status.scraped ? String(status.scraped) : "";
+  chrome.action.setBadgeBackgroundColor({ color }).catch(() => {});
   chrome.action.setBadgeText({ text }).catch(() => {});
   chrome.runtime.sendMessage({ type: "STATUS", status }).catch(() => {});
 }
@@ -92,17 +92,18 @@ async function returnToList(tabId: number): Promise<string> {
 async function crawl(tabId: number): Promise<void> {
   running = true;
   let loginPaused = false;
+  let aborted = false;
   let skipped = 0;
   const result = (await getScrape()) ?? emptyResult();
   const seen = new Set(result.students.map((s) => s.studentNumber));
 
   if ((await pageTypeOf(tabId)) !== "list") {
-    await publish({ running: false, message: "Open the student list page in this tab, then press Start." });
+    await publish({ running: false, error: true, message: "Open the student list page in this tab, then press Start." });
     running = false;
     return;
   }
   const { count } = await send<{ count: number }>(tabId, { type: "LIST_COUNT" });
-  await publish({ running: true, done: result.students.length, total: count, skipped: 0, scraped: result.students.length, message: "Scraping…" });
+  await publish({ running: true, done: result.students.length, total: count, skipped: 0, scraped: result.students.length, message: "Scraping…", error: false });
 
   const advance = async (i: number) => {
     await publish({ done: i + 1, total: count, skipped, scraped: result.students.length, message: `Scraping ${i + 1}/${count} · ${result.students.length} captured` });
@@ -112,7 +113,8 @@ async function crawl(tabId: number): Promise<void> {
     const pt = await returnToList(tabId);
     if (pt === "login") { loginPaused = true; await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." }); return false; }
     if (pt !== "list") {
-      await publish({ running: false, message: `Couldn't get back to the student list after student #${i + 1}. Re-open the list and press Start to resume.` });
+      aborted = true;
+      await publish({ running: false, error: true, message: `Couldn't get back to the student list after student #${i + 1}. Refresh the eVision list page and press Start to resume — if it keeps stopping here, the Back step isn't working in this browser; tell the developer.` });
       return false;
     }
     return true;
@@ -177,7 +179,9 @@ async function crawl(tabId: number): Promise<void> {
     await sleep(DELAY_MS);
   }
   running = false;
-  if (!loginPaused) await publish({ running: false, done: count, message: `Finished — ${result.students.length} captured, ${skipped} skipped (no access).` });
+  if (!loginPaused && !aborted) {
+    await publish({ running: false, error: false, message: `Finished — checked ${count} students: ${result.students.length} captured, ${skipped} skipped (no access).` });
+  }
 }
 
 /** Manual fallback: scrape just the marks page currently open in the active tab. */
