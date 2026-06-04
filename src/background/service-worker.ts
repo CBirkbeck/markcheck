@@ -76,90 +76,99 @@ async function waitForPageType(tabId: number, expected: string[], timeoutMs = 15
   }
   return "timeout";
 }
-/** Step back to the student list using the page's own Back action (history.back), like the user's Back button. */
-async function returnToList(tabId: number): Promise<string> {
-  let pt = await pageTypeOf(tabId);
-  let hops = 0;
-  while (pt !== "list" && pt !== "login" && hops < 5) {
-    await send(tabId, { type: "CLICK_BACK" });
-    await sleep(500); // let the back navigation begin
-    pt = await waitForPageType(tabId, ["list", "detail", "submit", "marks"], T_NAV);
-    hops++;
-  }
-  return pt;
+/** Resolve with the id of the next tab Chrome creates (or null after timeout). */
+function waitForNewTab(timeoutMs: number): Promise<number | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (id: number | null) => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onCreated.removeListener(listener);
+      resolve(id);
+    };
+    const listener = (tab: chrome.tabs.Tab) => {
+      if (tab.id != null) finish(tab.id);
+    };
+    chrome.tabs.onCreated.addListener(listener);
+    setTimeout(() => finish(null), timeoutMs);
+  });
 }
 
-async function crawl(tabId: number): Promise<void> {
+async function closeTab(id: number): Promise<void> {
+  await chrome.tabs.remove(id).catch(() => {});
+}
+
+async function crawl(listTabId: number): Promise<void> {
   running = true;
   let loginPaused = false;
-  let aborted = false;
   let skipped = 0;
   const result = (await getScrape()) ?? emptyResult();
   const seen = new Set(result.students.map((s) => s.studentNumber));
 
-  if ((await pageTypeOf(tabId)) !== "list") {
+  if ((await pageTypeOf(listTabId)) !== "list") {
     await publish({ running: false, error: true, message: "Open the student list page in this tab, then press Start." });
     running = false;
     return;
   }
-  const { count } = await send<{ count: number }>(tabId, { type: "LIST_COUNT" });
-  await publish({ running: true, done: result.students.length, total: count, skipped: 0, scraped: result.students.length, message: "Scraping…", error: false });
+  const { count } = await send<{ count: number }>(listTabId, { type: "LIST_COUNT" });
+  await publish({ running: true, error: false, done: result.students.length, total: count, skipped: 0, scraped: result.students.length, message: "Scraping…" });
 
   const advance = async (i: number) => {
     await publish({ done: i + 1, total: count, skipped, scraped: result.students.length, message: `Scraping ${i + 1}/${count} · ${result.students.length} captured` });
   };
-  // Return to the list via Back; returns true if we made it, publishes login pause if needed.
-  const goHome = async (i: number): Promise<boolean> => {
-    const pt = await returnToList(tabId);
-    if (pt === "login") { loginPaused = true; await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." }); return false; }
-    if (pt !== "list") {
-      aborted = true;
-      await publish({ running: false, error: true, message: `Couldn't get back to the student list after student #${i + 1}. Refresh the eVision list page and press Start to resume — if it keeps stopping here, the Back step isn't working in this browser; tell the developer.` });
-      return false;
-    }
-    return true;
-  };
 
   for (let i = result.students.length; i < count && running; i++) {
-    // make sure we're on the list before clicking the next student
-    if ((await pageTypeOf(tabId)) !== "list" && !(await goHome(i - 1))) break;
+    if ((await pageTypeOf(listTabId)) === "login") {
+      loginPaused = true;
+      await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." });
+      break;
+    }
 
-    // 1. open detail; no "Modules and Marks" link → no access → skip
-    await send(tabId, { type: "CLICK_DETAILS", index: i });
-    let pt = await loadedPageType(tabId);
-    if (pt === "login") { loginPaused = true; await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." }); break; }
-    if (pt !== "detail") {
-      skipped += 1;
+    // Open this student's detail page in a NEW tab (genuine link click → valid token; the list tab is left untouched).
+    const newTabP = waitForNewTab(T_NAV);
+    await send(listTabId, { type: "OPEN_DETAILS_NEW_TAB", index: i });
+    const workerTabId = await newTabP;
+    if (workerTabId == null) {
+      result.failures.push({ reason: `couldn't open student #${i + 1}` });
       await advance(i);
-      if (!(await goHome(i))) break;
       continue;
     }
+    // Put focus back on the list tab; the worker tab is driven in the background.
+    await chrome.tabs.update(listTabId, { active: true }).catch(() => {});
 
-    // 2. Modules and Marks
-    await send(tabId, { type: "CLICK_MARKS" });
-    pt = await loadedPageType(tabId);
-    if (pt === "login") { loginPaused = true; await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." }); break; }
-
-    // 3. Submit → wait for the table to generate (POST; slow)
-    if (pt === "submit") {
-      await send(tabId, { type: "CLICK_SUBMIT" });
-      pt = await waitForPageType(tabId, ["marks"], T_TABLE);
-      if (pt === "login") { loginPaused = true; await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." }); break; }
-    }
-    if (pt !== "marks") {
-      skipped += 1;
-      await advance(i);
-      if (!(await goHome(i))) break;
-      continue;
-    }
-
-    // 4. scrape — settle, re-scrape once if empty
-    await sleep(1000);
     try {
-      let page = await send<{ studentNumber: string; name: string; marks: Omit<MarkRecord, "studentNumber">[] }>(tabId, { type: "SCRAPE" });
+      let pt = await loadedPageType(workerTabId);
+      if (pt === "login") {
+        loginPaused = true;
+        await publish({ running: false, message: "Paused — log into eVision, then press Start to resume." });
+        await closeTab(workerTabId);
+        break;
+      }
+      if (pt !== "detail") {
+        skipped += 1; // no Modules-and-Marks link → no access
+        await advance(i);
+        await closeTab(workerTabId);
+        continue;
+      }
+
+      await send(workerTabId, { type: "CLICK_MARKS" });
+      pt = await loadedPageType(workerTabId);
+      if (pt === "submit") {
+        await send(workerTabId, { type: "CLICK_SUBMIT" });
+        pt = await waitForPageType(workerTabId, ["marks"], T_TABLE);
+      }
+      if (pt !== "marks") {
+        skipped += 1;
+        await advance(i);
+        await closeTab(workerTabId);
+        continue;
+      }
+
+      await sleep(1000); // let the generated table settle
+      let page = await send<{ studentNumber: string; name: string; marks: Omit<MarkRecord, "studentNumber">[] }>(workerTabId, { type: "SCRAPE" });
       if (page.marks.length === 0) {
         await sleep(2500);
-        page = await send<{ studentNumber: string; name: string; marks: Omit<MarkRecord, "studentNumber">[] }>(tabId, { type: "SCRAPE" });
+        page = await send<{ studentNumber: string; name: string; marks: Omit<MarkRecord, "studentNumber">[] }>(workerTabId, { type: "SCRAPE" });
       }
       if (page.studentNumber && !seen.has(page.studentNumber)) {
         seen.add(page.studentNumber);
@@ -168,18 +177,19 @@ async function crawl(tabId: number): Promise<void> {
       } else if (!page.studentNumber) {
         result.failures.push({ reason: `no student number scraped for student #${i + 1}` });
       }
+      result.scrapedAt = new Date().toISOString();
+      await setScrape(result);
+      await advance(i);
     } catch (e) {
-      result.failures.push({ reason: `scrape error for student #${i + 1}: ${String(e)}` });
+      result.failures.push({ reason: `error on student #${i + 1}: ${String(e)}` });
+      await advance(i);
+    } finally {
+      await closeTab(workerTabId);
     }
-    result.scrapedAt = new Date().toISOString();
-    await setScrape(result);
-    await advance(i);
-
-    if (!(await goHome(i))) break;
     await sleep(DELAY_MS);
   }
   running = false;
-  if (!loginPaused && !aborted) {
+  if (!loginPaused) {
     await publish({ running: false, error: false, message: `Finished — checked ${count} students: ${result.students.length} captured, ${skipped} skipped (no access).` });
   }
 }

@@ -49,15 +49,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, send) => {
         if (a) { a.click(); send({ ok: true }); } else send({ ok: false, reason: "no details link at index " + msg.index });
         break;
       }
+      case "OPEN_DETAILS_NEW_TAB": {
+        const links = document.querySelectorAll<HTMLAnchorElement>(SEL.details);
+        const a = links[msg.index as number];
+        if (a) {
+          a.target = "_blank";
+          a.click();
+          send({ ok: true });
+        } else {
+          send({ ok: false, reason: "no details link at index " + msg.index });
+        }
+        break;
+      }
       case "CLICK_MARKS":
         send({ ok: clickFirst(SEL.marks) });
         break;
       case "CLICK_SUBMIT":
         send({ ok: clickFirst(SEL.submit) });
-        break;
-      case "CLICK_BACK":
-        send({ ok: true });
-        setTimeout(() => history.back(), 0);
         break;
       case "SCRAPE":
         send(scrapeCurrent());
