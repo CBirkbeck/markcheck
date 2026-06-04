@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { renderReport, renderMappingPanel, renderByStudent, renderMarkTable } from "../src/results/results";
+import { renderReport, renderMappingPanel, renderByStudent, renderMarkTable, renderDiscrepancies } from "../src/results/results";
 import { buildReport } from "../src/lib/report";
 import type { BlackboardColumn, ComparedMark, Discrepancy, EvisionComponent, MappingEntry } from "../src/lib/types";
 
@@ -98,5 +98,25 @@ describe("renderMarkTable", () => {
     expect(root.querySelector("tr.agree")?.textContent).toContain("Alice");
     expect(root.querySelector("tr.disagree")?.textContent).toContain("Bob");
     expect(root.textContent).toContain("1/2 agree");
+  });
+});
+
+describe("renderDiscrepancies", () => {
+  it("lists each mismatch with the student name and coursework", () => {
+    const root = document.createElement("div");
+    const d: Discrepancy = {
+      studentNumber: "100200300", name: "Alice Smith", module: "MTHA4007B", componentNumber: "001",
+      courseworkName: "Coursework 1", blackboardMark: 65, evisionMark: 70, kind: "different",
+    };
+    renderDiscrepancies(root, [d]);
+    expect(root.textContent).toContain("Alice Smith");
+    expect(root.textContent).toContain("Coursework 1");
+    expect(root.textContent).toContain("differs");
+    expect(root.querySelector("tr.disagree")).toBeTruthy();
+  });
+  it("shows an all-clear message when there are none", () => {
+    const root = document.createElement("div");
+    renderDiscrepancies(root, []);
+    expect(root.textContent).toContain("No discrepancies");
   });
 });

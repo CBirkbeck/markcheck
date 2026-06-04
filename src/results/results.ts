@@ -101,6 +101,30 @@ const KIND_LABEL: Record<string, string> = {
   scale_warning: "scale mismatch",
 };
 
+/** Focused table of every mismatch — student name + coursework + both marks + the issue. */
+export function renderDiscrepancies(root: HTMLElement, discrepancies: Discrepancy[]): void {
+  if (discrepancies.length === 0) {
+    root.innerHTML = '<h2>Discrepancies</h2><p class="stu ok">✓ No discrepancies — every compared mark agrees.</p>';
+    return;
+  }
+  const sorted = [...discrepancies].sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) ||
+      a.studentNumber.localeCompare(b.studentNumber) ||
+      a.module.localeCompare(b.module) ||
+      a.componentNumber.localeCompare(b.componentNumber),
+  );
+  const head =
+    "<tr><th>Name</th><th>Student</th><th>Module</th><th>Coursework</th><th>Blackboard</th><th>eVision</th><th>Issue</th></tr>";
+  const body = sorted
+    .map(
+      (d) =>
+        `<tr class="disagree"><td>${esc(d.name)}</td><td>${esc(d.studentNumber)}</td><td>${esc(d.module)}</td><td>${esc(d.courseworkName || d.componentNumber)}</td><td>${d.blackboardMark ?? ""}</td><td>${d.evisionMark ?? "—"}</td><td>${esc(KIND_LABEL[d.kind] ?? d.kind)}</td></tr>`,
+    )
+    .join("");
+  root.innerHTML = `<h2>Discrepancies — ${discrepancies.length} to check</h2><table class="marks">${head}${body}</table>`;
+}
+
 /** Flat table of every compared mark, green when Blackboard and eVision agree, red when not. */
 export function renderMarkTable(root: HTMLElement, rows: ComparedMark[]): void {
   if (rows.length === 0) {
@@ -202,6 +226,7 @@ async function run(text: string): Promise<Discrepancy[]> {
   const names = new Map(scrape.students.map((s) => [s.studentNumber, s.name]));
   const discrepancies = compare(scrape, marks, names);
   renderMarkTable(document.getElementById("marks")!, comparedRows(scrape, marks, names));
+  renderDiscrepancies(document.getElementById("discrepancies")!, discrepancies);
   meta.textContent = `eVision: ${scrape.students.length} students, ${scrape.marks.length} marks · scraped ${scrape.scrapedAt}`;
   const evNums = new Set(scrape.students.map((s) => s.studentNumber));
   const inBoth = data.rows.filter((r) => evNums.has(r.studentNumber)).length;
