@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font: 13px system-ui; width: 300px; padding: 12px; }
+      button { font: inherit; padding: 6px 10px; margin: 0 6px 6px 0; }
+      #bar { height: 6px; background: #eee; border-radius: 3px; margin: 8px 0; }
+      #fill { height: 6px; background: #3b82f6; border-radius: 3px; width: 0; }
+      .warn { color: #b45309; }
+      .muted { color: #6b7280; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h3>markcheck</h3>
+    <button id="start">Start scrape</button>
+    <button id="stop">Stop</button>
+    <div id="bar"><div id="fill"></div></div>
+    <p id="status">Idle.</p>
+    <button id="one" title="Scrape only the Modules and Marks page currently open">Scrape this page</button>
+    <button id="results">Open results</button>
+    <p class="muted">Start on the student list to scrape everyone, or open one student's Modules and Marks page and use "Scrape this page".</p>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

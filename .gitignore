@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.local
+# Never commit student data
+data/
+*.csv
+*.tsv
+*.xls
+*.xlsx
+!tests/fixtures/*.tsv
+!tests/fixtures/*.csv

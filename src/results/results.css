@@ -1,0 +1,20 @@
+body { font: 14px system-ui; margin: 24px; max-width: 1000px; }
+h1 { font-size: 20px; }
+.cards { display: flex; gap: 12px; margin: 16px 0; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; min-width: 120px; }
+.card b { font-size: 24px; display: block; }
+.missing b { color: #dc2626; }
+.different b { color: #d97706; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0 24px; }
+th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+th { background: #f9fafb; }
+.controls { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+.muted { color: #6b7280; }
+.warn { color: #b45309; }
+.tag { font-size: 12px; }
+.stu { padding: 6px 10px; border-radius: 6px; margin: 5px 0; }
+.stu.ok { background: #ecfdf5; color: #065f46; }
+.stu.bad { background: #fef2f2; color: #991b1b; font-weight: 600; }
+.stu + table { margin-top: 0; }
+table.marks tr.agree td { background: #ecfdf5; }
+table.marks tr.disagree td { background: #fef2f2; color: #991b1b; font-weight: 600; }

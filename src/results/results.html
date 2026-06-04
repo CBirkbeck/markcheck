@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>markcheck results</title><link rel="stylesheet" href="./results.css" /></head>
+  <body>
+    <h1>markcheck — comparison</h1>
+    <div class="controls">
+      <label>Blackboard CSV: <input id="file" type="file" accept=".csv,.tsv,.txt" /></label>
+      <button id="export" disabled>Export discrepancies CSV</button>
+      <button id="clear">Clear all local data</button>
+    </div>
+    <p id="meta" class="muted"></p>
+    <div id="summary" class="muted"></div>
+    <div id="failures"></div>
+    <div id="mapping"></div>
+    <div id="marks"></div>
+    <div id="bystudent"></div>
+    <div id="report"></div>
+    <script type="module" src="./results.ts"></script>
+  </body>
+</html>

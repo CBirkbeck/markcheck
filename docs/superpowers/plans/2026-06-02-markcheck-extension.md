@@ -273,7 +273,7 @@ export interface Discrepancy {
   studentNumber: string;
   name: string;
   module: string;
-  component: string; // component number
+  componentNumber: string; // SITS component number
   courseworkName: string;
   blackboardMark: number | null;
   evisionMark: number | null;
@@ -343,6 +343,13 @@ describe("parseColumnHeader", () => {
     expect(c?.columnId).toBe("378856");
   });
 
+  it("extracts a clean name when the module code is embedded mid-label", () => {
+    const c = parseColumnHeader("Resit MTHA4007B Essay [Total Pts: 100 Score] |400001");
+    expect(c?.kind).toBe("named");
+    expect(c?.module).toBe("MTHA4007B");
+    expect(c?.name).toBe("Resit Essay");
+  });
+
   it("classifies a column with no module code as junk", () => {
     const c = parseColumnHeader("New Assignment [Total Pts: 2 Score] |346905");
     expect(c?.kind).toBe("junk");
@@ -392,7 +399,7 @@ export function parseColumnHeader(raw: string): BlackboardColumn | null {
   const moduleMatch = namePart.match(MODULE_CODE_RE);
   if (moduleMatch) {
     const module = moduleMatch[1];
-    const name = namePart.replace(module, "").trim() || namePart;
+    const name = namePart.replace(module, "").replace(/\s+/g, " ").trim() || namePart;
     return { columnId, rawLabel: raw, module, name, maxPoints, kind: "named" };
   }
 
@@ -822,7 +829,7 @@ export function compare(
       studentNumber: bb.studentNumber,
       name: nameByNumber.get(bb.studentNumber) ?? "",
       module: bb.module,
-      component: bb.componentNumber,
+      componentNumber: bb.componentNumber,
       courseworkName: ev?.courseworkName ?? "",
       blackboardMark: bb.mark,
       evisionMark: ev?.mark ?? null,
@@ -873,7 +880,7 @@ import { buildReport, toCsv } from "../src/lib/report";
 import type { Discrepancy } from "../src/lib/types";
 
 const d = (kind: Discrepancy["kind"], over: Partial<Discrepancy> = {}): Discrepancy => ({
-  studentNumber: "1", name: "Alice", module: "M", component: "001", courseworkName: "CW1",
+  studentNumber: "1", name: "Alice", module: "M", componentNumber: "001", courseworkName: "CW1",
   blackboardMark: 65, evisionMark: 70, kind, ...over,
 });
 
@@ -939,7 +946,7 @@ export function toCsv(d: Discrepancy[]): string {
   const lines = [HEADERS.join(",")];
   for (const x of d) {
     lines.push(
-      [x.studentNumber, x.name, x.module, x.component, x.courseworkName, x.blackboardMark, x.evisionMark, x.kind, x.evisionDate]
+      [x.studentNumber, x.name, x.module, x.componentNumber, x.courseworkName, x.blackboardMark, x.evisionMark, x.kind, x.evisionDate]
         .map(esc)
         .join(","),
     );
@@ -1283,6 +1290,17 @@ git commit -m "feat: MV3 manifest, vite build, minimal popup shell"
 > capture; the worker then adjusts the parser. Do NOT commit real student data —
 > sanitise first.
 
+**Reconciliation checklist (from the Task 8 review) — verify each against the real DOM:**
+1. **Table shape:** `parseEvisionTable` assumes `<thead>`/`<tbody>`. If eVision uses a flat table or first-row headers, add a fallback.
+2. **Component/Seq number — CRITICAL:** confirm eVision actually exposes a numeric sequence/component per assessment. The entire Blackboard↔eVision match keys on `(module, componentNumber)`; if it's absent, the matching strategy must be revised (e.g. match coded `{00x}` columns by name instead).
+3. **"mark" keyword collision:** `find("mark", ...)` uses substring match — would also hit "Remark"/"Benchmark". Tighten to exact/`startsWith` once the real header text is known; also reconsider the aggressive `"%"` keyword.
+4. **Multiple tables per page:** `querySelector("table")` returns only the first. If eVision shows one table per module, loop `querySelectorAll("table")` (or have the content script pass one table at a time).
+5. **Mark cell formats:** real cells may be "65.0", "65 %", or non-numeric codes ("AB", "NS"). Decide which to strip (`.replace(/[^0-9.]/g, "")`) vs skip.
+6. **Merged cells (colspan/rowspan):** SITS tables sometimes merge a module name across component rows — this shifts `cells[idx]`. Inspect and expand if present.
+7. **Module cell format + code regex:** confirm code-first vs name-first and that `MODULE_CODE_RE` covers the institution's code range.
+8. **Date format:** confirm (fixture assumes `DD-MON-YYYY`) and update the `MarkRecord.date` comment.
+9. **Student number + name location:** capture the selectors for these on the student page (needed by Task 12's content script).
+
 **Files:**
 - Modify: `tests/fixtures/evision-table-sample.html`
 - Modify: `src/lib/evision-parse.ts`
@@ -1596,7 +1614,7 @@ import { buildReport } from "../src/lib/report";
 import type { Discrepancy } from "../src/lib/types";
 
 const d = (kind: Discrepancy["kind"]): Discrepancy => ({
-  studentNumber: "100200300", name: "Alice Smith", module: "MTHA4007B", component: "001",
+  studentNumber: "100200300", name: "Alice Smith", module: "MTHA4007B", componentNumber: "001",
   courseworkName: "Coursework 1", blackboardMark: 65, evisionMark: 70, kind,
 });
 
@@ -1671,7 +1689,7 @@ function table(rows: Discrepancy[]): string {
   const body = rows
     .map(
       (r) =>
-        `<tr><td>${r.studentNumber}</td><td>${r.name}</td><td>${r.module}</td><td>${r.component}</td><td>${r.courseworkName}</td><td>${r.blackboardMark ?? ""}</td><td>${r.evisionMark ?? "—"}</td><td>${r.evisionDate ?? ""}</td></tr>`,
+        `<tr><td>${r.studentNumber}</td><td>${r.name}</td><td>${r.module}</td><td>${r.componentNumber}</td><td>${r.courseworkName}</td><td>${r.blackboardMark ?? ""}</td><td>${r.evisionMark ?? "—"}</td><td>${r.evisionDate ?? ""}</td></tr>`,
     )
     .join("");
   return `<table>${head}${body}</table>`;
@@ -1772,6 +1790,8 @@ git commit -m "feat: results page — load CSV, compare, render, export, clear"
 
 **Files:**
 - Modify: `src/results/results.ts`
+
+> Review notes (surfaced in Task 5): the panel should (a) visually distinguish **exact/coded** mappings from **guessed/named** ones (so the user knows which to scrutinise), and (b) **warn when two columns are mapped to the same component target** (duplicate targets would double-count a mark in the comparison).
 
 - [ ] **Step 1: Add a mapping panel that lists unresolved/named columns and lets the user assign a component or ignore**
 
