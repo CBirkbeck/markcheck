@@ -50,19 +50,64 @@ This was the first requirement, not an afterthought:
 
 ## Install
 
-> A one-click Chrome/Edge Web Store link will go here once it's published.
+There are two ways to install it. **Option A needs no coding** and is identical on
+**Windows, macOS, and Linux**. (A one-click Web Store version may come later.)
 
-Until then (developer mode — a few clicks, no command line for users if someone
-shares a built `dist/` folder):
+### Option A — Download the ready-made extension (easiest)
 
-1. Download this repo and run `npm install && npm run build` once (see
-   [For developers](#for-developers)). This produces a `dist/` folder.
-2. Open `chrome://extensions`, turn on **Developer mode** (top-right).
-3. Click **Load unpacked** and choose the **`dist`** folder.
-4. The **markcheck** icon appears in the toolbar.
+1. Go to the **[Releases page](https://github.com/CBirkbeck/markcheck/releases)** and,
+   under the latest release, download **`markcheck.zip`**.
+2. **Unzip it** somewhere you'll keep it — *don't delete the folder afterwards*, because
+   the browser loads the extension directly from it:
+   - **Windows:** right-click `markcheck.zip` → **Extract All…** → choose a folder (e.g.
+     your Documents) → **Extract**.
+   - **macOS:** double-click `markcheck.zip` — it unzips into a folder next to it.
+   - **Linux:** right-click → **Extract Here**, or run `unzip markcheck.zip` in a terminal.
 
-Works in Chrome and Edge (both Chromium). The eVision host it activates on is set in
-`src/manifest.ts` — change it for a different institution.
+   You'll end up with a folder that contains a file called **`manifest.json`**.
+3. Open your browser's extensions page — type one of these into the address bar and press
+   **Enter**:
+   - **Chrome:** `chrome://extensions`
+   - **Edge:** `edge://extensions`
+   - **Brave:** `brave://extensions`
+4. Turn on **Developer mode** — a switch in the **top-right** corner (Chrome/Brave) or in
+   the **left-hand sidebar** (Edge).
+5. Click **Load unpacked**, then select the **folder you unzipped in step 2** (the one
+   containing `manifest.json`) and confirm with **Select Folder / Open**.
+6. Done — the **markcheck** icon appears in your toolbar. If you don't see it, click the
+   **puzzle-piece** icon in the toolbar and **pin** markcheck.
+
+> **A couple of normal things you may notice:**
+> - Loaded this way (Developer mode), the browser may show a small reminder about
+>   developer extensions on start-up. That's expected for extensions not yet on the Web
+>   Store — it's safe to dismiss, and you can keep markcheck enabled.
+> - **To update later:** download the newer `markcheck.zip`, unzip it over the same folder,
+>   then click the **↻ reload** icon on the markcheck card in the extensions page.
+
+### Option B — Build it from the source
+
+Choose this if you want to change something — most commonly the **eVision web address**
+for a different university (it's set in `src/manifest.ts`).
+
+1. **Install Node.js** (version 18 or newer). Download the **LTS** installer from
+   **[nodejs.org](https://nodejs.org)**:
+   - **Windows / macOS:** run the downloaded installer and click through it.
+   - **Linux (Debian/Ubuntu):** `sudo apt install nodejs npm` — or use the installer from
+     nodejs.org.
+
+   To check it worked, open a terminal — **Command Prompt** or **PowerShell** on Windows,
+   **Terminal** on macOS/Linux — and run `node --version`; it should print a version number.
+2. **Get the code:** click the green **Code** button on this page → **Download ZIP**, then
+   unzip it. (Or, with git: `git clone https://github.com/CBirkbeck/markcheck.git`.)
+3. **Open a terminal in that folder** and run:
+   ```bash
+   npm install
+   npm run build
+   ```
+   This creates a **`dist`** folder.
+4. Load the **`dist`** folder using **Load unpacked**, exactly as in steps 3–6 of Option A.
+
+Works in Chrome, Edge, and Brave (all Chromium-based).
 
 ## Use
 
